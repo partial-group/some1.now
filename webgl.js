@@ -1,7 +1,7 @@
-class WebGLDotsAnimation {
+class WebGL2DotsAnimation {
     constructor() {
         this.canvas = document.querySelector('.dots-canvas');
-        this.gl = this.canvas.getContext('webgl', { 
+        this.gl = this.canvas.getContext('webgl2', { 
             antialias: true,
             alpha: true
         });
@@ -10,7 +10,7 @@ class WebGLDotsAnimation {
         this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
         
         if (!this.gl) {
-            console.error('WebGL not supported');
+            console.error('WebGL 2.0 not supported');
             return;
         }
 
@@ -25,15 +25,15 @@ class WebGLDotsAnimation {
     }
 
     setupGL() {
-        const vertexShaderSource = `
-            attribute vec2 a_position;
-            attribute float a_speed;
-            attribute float a_offset;
+        const vertexShaderSource = `#version 300 es
+            layout(location = 0) in vec2 a_position;
+            layout(location = 1) in float a_speed;
+            layout(location = 2) in float a_offset;
             
             uniform vec2 u_resolution;
             uniform float u_time;
             
-            varying float v_opacity;
+            out float v_opacity;
 
             void main() {
                 vec2 zeroToOne = a_position / u_resolution;
@@ -47,9 +47,11 @@ class WebGLDotsAnimation {
             }
         `;
 
-        const fragmentShaderSource = `
+        const fragmentShaderSource = `#version 300 es
             precision mediump float;
-            varying float v_opacity;
+            
+            in float v_opacity;
+            out vec4 fragColor;
 
             void main() {
                 float r = 0.0;
@@ -58,7 +60,7 @@ class WebGLDotsAnimation {
                 if (r > 1.0) {
                     discard;
                 }
-                gl_FragColor = vec4(1.0, 1.0, 1.0, v_opacity);
+                fragColor = vec4(1.0, 1.0, 1.0, v_opacity);
             }
         `;
 
@@ -67,11 +69,15 @@ class WebGLDotsAnimation {
 
         this.program = this.createProgram(vertexShader, fragmentShader);
         
-        this.positionLocation = this.gl.getAttribLocation(this.program, "a_position");
-        this.speedLocation = this.gl.getAttribLocation(this.program, "a_speed");
-        this.offsetLocation = this.gl.getAttribLocation(this.program, "a_offset");
+        this.positionLocation = 0;
+        this.speedLocation = 1;
+        this.offsetLocation = 2;
+        
         this.resolutionLocation = this.gl.getUniformLocation(this.program, "u_resolution");
         this.timeLocation = this.gl.getUniformLocation(this.program, "u_time");
+
+        this.vao = this.gl.createVertexArray();
+        this.gl.bindVertexArray(this.vao);
 
         this.positionBuffer = this.gl.createBuffer();
         this.speedBuffer = this.gl.createBuffer();
@@ -85,6 +91,7 @@ class WebGLDotsAnimation {
         const shader = this.gl.createShader(type);
         this.gl.shaderSource(shader, source);
         this.gl.compileShader(shader);
+        
         if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
             console.error('Shader compile error:', this.gl.getShaderInfoLog(shader));
             this.gl.deleteShader(shader);
@@ -98,6 +105,7 @@ class WebGLDotsAnimation {
         this.gl.attachShader(program, vertexShader);
         this.gl.attachShader(program, fragmentShader);
         this.gl.linkProgram(program);
+        
         if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
             console.error('Program link error:', this.gl.getProgramInfoLog(program));
             return null;
@@ -153,14 +161,24 @@ class WebGLDotsAnimation {
         const speeds = new Float32Array(this.dots.map(dot => dot.speed));
         const offsets = new Float32Array(this.dots.map(dot => dot.offset));
 
+        this.gl.bindVertexArray(this.vao);
+
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, positions, this.gl.STATIC_DRAW);
+        this.gl.enableVertexAttribArray(this.positionLocation);
+        this.gl.vertexAttribPointer(this.positionLocation, 2, this.gl.FLOAT, false, 0, 0);
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.speedBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, speeds, this.gl.STATIC_DRAW);
+        this.gl.enableVertexAttribArray(this.speedLocation);
+        this.gl.vertexAttribPointer(this.speedLocation, 1, this.gl.FLOAT, false, 0, 0);
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.offsetBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, offsets, this.gl.STATIC_DRAW);
+        this.gl.enableVertexAttribArray(this.offsetLocation);
+        this.gl.vertexAttribPointer(this.offsetLocation, 1, this.gl.FLOAT, false, 0, 0);
+
+        this.gl.bindVertexArray(null);
     }
 
     drawDots() {
@@ -168,23 +186,14 @@ class WebGLDotsAnimation {
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
         this.gl.useProgram(this.program);
+        this.gl.bindVertexArray(this.vao);
 
         this.gl.uniform2f(this.resolutionLocation, this.canvas.width, this.canvas.height);
         this.gl.uniform1f(this.timeLocation, this.time);
 
-        this.gl.enableVertexAttribArray(this.positionLocation);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
-        this.gl.vertexAttribPointer(this.positionLocation, 2, this.gl.FLOAT, false, 0, 0);
-
-        this.gl.enableVertexAttribArray(this.speedLocation);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.speedBuffer);
-        this.gl.vertexAttribPointer(this.speedLocation, 1, this.gl.FLOAT, false, 0, 0);
-
-        this.gl.enableVertexAttribArray(this.offsetLocation);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.offsetBuffer);
-        this.gl.vertexAttribPointer(this.offsetLocation, 1, this.gl.FLOAT, false, 0, 0);
-
         this.gl.drawArrays(this.gl.POINTS, 0, this.dots.length);
+
+        this.gl.bindVertexArray(null);
     }
 
     stop() {
@@ -201,4 +210,4 @@ class WebGLDotsAnimation {
     }
 }
 
-new WebGLDotsAnimation();
+new WebGL2DotsAnimation();
