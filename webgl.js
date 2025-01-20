@@ -132,11 +132,9 @@ class WebGLDotsAnimation {
         this.dots = [];
         const gridSize = 20;
         
-        // Вычисляем количество точек, которое поместится полностью
         const cols = Math.floor(this.canvas.width / gridSize);
         const rows = Math.floor(this.canvas.height / gridSize);
         
-        // Вычисляем отступы для центрирования сетки
         const marginX = (this.canvas.width - (cols * gridSize)) / 2;
         const marginY = (this.canvas.height - (rows * gridSize)) / 2;
         
